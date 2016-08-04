@@ -83,4 +83,4 @@ ffi.set_source("pyopencl._cffi",
 
 
 if __name__ == "__main__":
-    ffi.compile()
+    ffi.compile(verbose=True)
