@@ -52,6 +52,8 @@ def get_config_schema():
                 ]
 
         default_libs = []
+        default_libdir = []
+        default_incdir = []
         default_cxxflags = default_cxxflags + [
                 '-stdlib=libc++', '-mmacosx-version-min=10.7',
                 '-arch', 'i386', '-arch', 'x86_64'
@@ -65,8 +67,13 @@ def get_config_schema():
 
         default_ldflags = default_cxxflags[:] + ["-Wl,-framework,OpenCL"]
 
+#        default_libs = ["OpenCL"]
+#        default_ldflags = []
+
     else:
-        default_libs = ["OpenCL"]
+        default_libs = ["xilinxopencl"]
+        default_libdir = ["/opt/Xilinx/SDAccel/2016.1/runtime/lib/x86_64"]
+        default_incdir = ["/opt/Xilinx/SDAccel/2016.1/runtime/include"]
         default_ldflags = []
 
     return ConfigSchema([
@@ -80,8 +87,8 @@ def get_config_schema():
         Option("CL_PRETEND_VERSION", None,
             "Dotted CL version (e.g. 1.2) which you'd like to use."),
 
-        IncludeDir("CL", []),
-        LibraryDir("CL", []),
+        IncludeDir("CL", default_incdir),
+        LibraryDir("CL", default_libdir),
         Libraries("CL", default_libs),
 
         StringListOption("CXXFLAGS", default_cxxflags,
