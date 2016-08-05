@@ -70,10 +70,9 @@ def get_config_schema():
 #        default_ldflags = []
 
     else:
-        default_libs = ["alterahalmmd","altera_apb_14_0_mmd","alteracl"]
+        default_libs = ["alterahalmmd","altera_apb_14_0_mmd","alteracl","elf"]
         default_libdir = ["/opt/altera/16.0/hld/board/terasic/de5net/linux64/lib","/opt/altera/16.0/hld/host/linux64/lib"]
-        #default_ldflags = ["-Wl,--no-as-needed","-Wl,--rpath=/opt/altera/16.0/hld/board/terasic/de5net/linux64/lib:/opt/altera/16.0/hld/host/linux64/lib"]
-        default_ldflags = ["-Wl,--no-as-needed","-Wl,--rpath,/opt/altera/16.0/hld/board/terasic/de5net/linux64/lib","-Wl,--rpath,/opt/altera/16.0/hld/host/linux64/lib"]
+        default_ldflags = ["-Wl,--no-as-needed"]
 
     return ConfigSchema([
         Switch("CL_TRACE", False, "Enable OpenCL API tracing"),
