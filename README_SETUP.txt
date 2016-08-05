@@ -32,3 +32,17 @@ configure, and it will automatically update these files for you.
 
 This is particularly handy if you want to perform an unattended or automatic
 installation via easy_install.
+
+-- Added by Nachiket
+To run example OpenCL kernel, two steps:
+   
+    aoc -march=emulator -v example.cl -o example.aocx
+    CL_CONTEXT_EMULATOR_DEVICE_ALTERA=1 python example.py
+
+You do need to modify the example code to load a binary blob.
+
+    dev =cl.get_platforms()[0].get_devices()
+    binary = open("sum.aocx", "rb").read()
+    prg = cl.Program(ctx,dev,[binary])
+    prg.build();
+    
