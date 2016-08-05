@@ -46,3 +46,4 @@ You do need to modify the example code to load a binary blob.
     prg = cl.Program(ctx,dev,[binary])
     prg.build();
     
+More instructions/notes at https://paper.dropbox.com/doc/PyOpenCL-with-Altera-FPGAs-8ojfCVUBhiz7UOjRTIaFe
