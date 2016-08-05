@@ -16,7 +16,7 @@ then you may specify several values, separated by commas.)
 aksetup also supports regular distutils installation, without using 
 configure:
 
-  python setup.py build
+  LDFLAGS="-Wl,--no-as-needed" python setup.py build
   sudo python setup.py install
 
 In this case, configuration is obtained from files in this order:
