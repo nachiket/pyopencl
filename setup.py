@@ -69,6 +69,7 @@ def get_config_schema():
 
     else:
         default_incdir = []
+        default_libdir = []
         default_libs = ["OpenCL"]
         default_ldflags = []
 
