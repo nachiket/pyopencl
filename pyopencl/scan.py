@@ -1,10 +1,6 @@
 """Scan primitive."""
 
-from __future__ import division
-from __future__ import absolute_import
-import six
-from six.moves import range
-from six.moves import zip
+from __future__ import division, absolute_import
 
 __copyright__ = """
 Copyright 2011-2012 Andreas Kloeckner
@@ -27,6 +23,9 @@ limitations under the License.
 Derived from code within the Thrust project, https://github.com/thrust/thrust/
 
 """
+
+import six
+from six.moves import range, zip
 
 import numpy as np
 
@@ -742,6 +741,7 @@ def _round_down_to_power_of_2(val):
     assert result <= val
     return result
 
+
 _PREFIX_WORDS = set("""
         ldata partial_scan_buffer global scan_offset
         segment_start_in_k_group carry
@@ -849,6 +849,7 @@ def _make_template(s):
         warn("leftover words in identifier prefixing: " + " ".join(leftovers))
 
     return mako.template.Template(s, strict_undefined=True)
+
 
 from pytools import Record
 
@@ -1065,6 +1066,10 @@ class GenericScanKernel(_GenericScanKernelBase):
                 dev.local_mem_size
                 for dev in self.devices)
 
+        if "CUDA" in self.devices[0].platform.name:
+            # not sure where these go, but roughly this much seems unavailable.
+            avail_local_mem -= 0x400
+
         is_cpu = self.devices[0].type & cl.device_type.CPU
         is_gpu = self.devices[0].type & cl.device_type.GPU
 
@@ -1091,7 +1096,7 @@ class GenericScanKernel(_GenericScanKernelBase):
                 k_group_size = 2**k_exp
                 lmem_use = self.get_local_mem_use(wg_size, k_group_size,
                         use_bank_conflict_avoidance)
-                if lmem_use + 256 <= avail_local_mem:
+                if lmem_use <= avail_local_mem:
                     solutions.append((wg_size*k_group_size, k_group_size, wg_size))
 
         if is_gpu:
@@ -1407,6 +1412,7 @@ class GenericScanKernel(_GenericScanKernelBase):
         # }}}
 
 # }}}
+
 
 # {{{ debug kernel
 

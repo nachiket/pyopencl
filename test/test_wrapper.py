@@ -30,6 +30,7 @@ import pytest
 
 import pyopencl as cl
 import pyopencl.array as cl_array
+import pyopencl.clrandom
 from pyopencl.tools import (  # noqa
         pytest_generate_tests_for_pyopencl as pytest_generate_tests)
 
@@ -293,15 +294,17 @@ def test_image_format_constructor():
     assert iform.channel_data_type == cl.channel_type.FLOAT
     assert not iform.__dict__
 
+
 def test_device_topology_amd_constructor():
     # doesn't need cl_amd_device_attribute_query support to succeed
-    topol = cl.DeviceTopologyAmd(3,4,5)
+    topol = cl.DeviceTopologyAmd(3, 4, 5)
 
     assert topol.bus == 3
     assert topol.device == 4
     assert topol.function == 5
-    
+
     assert not topol.__dict__
+
 
 def test_nonempty_supported_image_formats(ctx_factory):
     context = ctx_factory()
@@ -878,7 +881,7 @@ def test_global_offset(ctx_factory):
 
 def test_sub_buffers(ctx_factory):
     ctx = ctx_factory()
-    if (ctx._get_cl_version() < (1, 1) and
+    if (ctx._get_cl_version() < (1, 1) or
             cl.get_cl_header_version() < (1, 1)):
         from pytest import skip
         skip("sub-buffers are only available in OpenCL 1.1")
@@ -902,6 +905,125 @@ def test_sub_buffers(ctx_factory):
     cl.enqueue_copy(queue, a_sub, a_buf[start:stop])
 
     assert np.array_equal(a_sub, a_sub_ref)
+
+
+def test_spirv(ctx_factory):
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    if (ctx._get_cl_version() < (2, 1) or
+            cl.get_cl_header_version() < (2, 1)):
+        from pytest import skip
+        skip("SPIR-V program creation only available in OpenCL 2.1 and higher")
+
+    n = 50000
+
+    a_dev = cl.clrandom.rand(queue, n, np.float32)
+    b_dev = cl.clrandom.rand(queue, n, np.float32)
+    dest_dev = cl_array.empty_like(a_dev)
+
+    with open("add-vectors-%d.spv" % queue.device.address_bits, "rb") as spv_file:
+        spv = spv_file.read()
+
+    prg = cl.Program(ctx, spv)
+
+    prg.sum(queue, a_dev.shape, None, a_dev.data, b_dev.data, dest_dev.data)
+
+    assert la.norm((dest_dev - (a_dev+b_dev)).get()) < 1e-7
+
+
+def test_coarse_grain_svm(ctx_factory):
+    import sys
+    is_pypy = '__pypy__' in sys.builtin_module_names
+
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    if (ctx._get_cl_version() < (2, 0) or
+            cl.get_cl_header_version() < (2, 0)):
+        from pytest import skip
+        skip("SVM only available in OpenCL 2.0 and higher")
+    dev = ctx.devices[0]
+    if ("AMD" in dev.platform.name
+            and dev.type & cl.device_type.CPU):
+        pytest.xfail("AMD CPU doesn't do coarse-grain SVM")
+
+    n = 3000
+    svm_ary = cl.SVM(cl.csvm_empty(ctx, (n,), np.float32, alignment=64))
+    if not is_pypy:
+        # https://bitbucket.org/pypy/numpy/issues/52
+        assert isinstance(svm_ary.mem.base, cl.SVMAllocation)
+
+    if dev.platform.name != "Portable Computing Language":
+        # pocl 0.13 has a bug misinterpreting the size parameter
+        cl.enqueue_svm_memfill(queue, svm_ary, np.zeros((), svm_ary.mem.dtype))
+
+    with svm_ary.map_rw(queue) as ary:
+        ary.fill(17)
+        orig_ary = ary.copy()
+
+    prg = cl.Program(ctx, """
+        __kernel void twice(__global float *a_g)
+        {
+          a_g[get_global_id(0)] *= 2;
+        }
+        """).build()
+
+    prg.twice(queue, svm_ary.mem.shape, None, svm_ary)
+
+    with svm_ary.map_ro(queue) as ary:
+        print(ary)
+        assert np.array_equal(orig_ary*2, ary)
+
+    new_ary = np.empty_like(orig_ary)
+    new_ary.fill(-1)
+
+    if ctx.devices[0].platform.name != "Portable Computing Language":
+        # "Blocking memcpy is unimplemented (clEnqueueSVMMemcpy.c:61)"
+        # in pocl 0.13.
+
+        cl.enqueue_copy(queue, new_ary, svm_ary)
+        assert np.array_equal(orig_ary*2, new_ary)
+
+
+def test_fine_grain_svm(ctx_factory):
+    import sys
+    is_pypy = '__pypy__' in sys.builtin_module_names
+
+    ctx = ctx_factory()
+    queue = cl.CommandQueue(ctx)
+
+    from pytest import skip
+    if (ctx._get_cl_version() < (2, 0) or
+            cl.get_cl_header_version() < (2, 0)):
+        skip("SVM only available in OpenCL 2.0 and higher")
+
+    if not (ctx.devices[0].svm_capabilities
+            & cl.device_svm_capabilities.FINE_GRAIN_BUFFER):
+        skip("device does not support fine-grain SVM")
+
+    n = 3000
+    ary = cl.fsvm_empty(ctx, n, np.float32, alignment=64)
+
+    if not is_pypy:
+        # https://bitbucket.org/pypy/numpy/issues/52
+        assert isinstance(ary.base, cl.SVMAllocation)
+
+    ary.fill(17)
+    orig_ary = ary.copy()
+
+    prg = cl.Program(ctx, """
+        __kernel void twice(__global float *a_g)
+        {
+          a_g[get_global_id(0)] *= 2;
+        }
+        """).build()
+
+    prg.twice(queue, ary.shape, None, cl.SVM(ary))
+    queue.finish()
+
+    print(ary)
+    assert np.array_equal(orig_ary*2, ary)
 
 
 if __name__ == "__main__":

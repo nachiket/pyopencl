@@ -231,6 +231,93 @@ def test_absrealimag(ctx_factory):
                 print(dev_res-host_res)
             assert correct
 
+
+def test_custom_type_zeros(ctx_factory):
+    context = ctx_factory()
+    queue = cl.CommandQueue(context)
+
+    if not (
+            queue._get_cl_version() >= (1, 2)
+            and cl.get_cl_header_version() >= (1, 2)):
+        pytest.skip("CL1.2 not available")
+
+    dtype = np.dtype([
+        ("cur_min", np.int32),
+        ("cur_max", np.int32),
+        ("pad", np.int32),
+        ])
+
+    from pyopencl.tools import get_or_register_dtype, match_dtype_to_c_struct
+
+    name = "mmc_type"
+    dtype, c_decl = match_dtype_to_c_struct(queue.device, name, dtype)
+    dtype = get_or_register_dtype(name, dtype)
+
+    n = 1000
+    z_dev = cl.array.zeros(queue, n, dtype=dtype)
+
+    z = z_dev.get()
+
+    assert np.array_equal(np.zeros(n, dtype), z)
+
+
+def test_custom_type_fill(ctx_factory):
+    context = ctx_factory()
+    queue = cl.CommandQueue(context)
+
+    from pyopencl.characterize import has_struct_arg_count_bug
+    if has_struct_arg_count_bug(queue.device):
+        pytest.skip("device has LLVM arg counting bug")
+
+    dtype = np.dtype([
+        ("cur_min", np.int32),
+        ("cur_max", np.int32),
+        ("pad", np.int32),
+        ])
+
+    from pyopencl.tools import get_or_register_dtype, match_dtype_to_c_struct
+
+    name = "mmc_type"
+    dtype, c_decl = match_dtype_to_c_struct(queue.device, name, dtype)
+    dtype = get_or_register_dtype(name, dtype)
+
+    n = 1000
+    z_dev = cl.array.empty(queue, n, dtype=dtype)
+    z_dev.fill(np.zeros((), dtype))
+
+    z = z_dev.get()
+
+    assert np.array_equal(np.zeros(n, dtype), z)
+
+
+def test_custom_type_take_put(ctx_factory):
+    context = ctx_factory()
+    queue = cl.CommandQueue(context)
+
+    dtype = np.dtype([
+        ("cur_min", np.int32),
+        ("cur_max", np.int32),
+        ])
+
+    from pyopencl.tools import get_or_register_dtype, match_dtype_to_c_struct
+
+    name = "tp_type"
+    dtype, c_decl = match_dtype_to_c_struct(queue.device, name, dtype)
+    dtype = get_or_register_dtype(name, dtype)
+
+    n = 100
+    z = np.empty(100, dtype)
+    z["cur_min"] = np.arange(n)
+    z["cur_max"] = np.arange(n)**2
+
+    z_dev = cl.array.to_device(queue, z)
+    ind = cl.array.arange(queue, n, step=3, dtype=np.int32)
+
+    z_ind_ref = z[ind.get()]
+    z_ind = z_dev[ind]
+
+    assert np.array_equal(z_ind.get(), z_ind_ref)
+
 # }}}
 
 
@@ -409,6 +496,76 @@ def test_divide_array(ctx_factory):
 
     a_divide = (b_gpu / a_gpu).get()
     assert (np.abs(b / a - a_divide) < 1e-3).all()
+
+
+def test_bitwise(ctx_factory):
+    if _PYPY:
+        pytest.xfail("numpypy: missing bitwise ops")
+
+    context = ctx_factory()
+    queue = cl.CommandQueue(context)
+
+    from itertools import product
+
+    dtypes = [np.dtype(t) for t in (np.int64, np.int32, np.int16, np.int8)]
+
+    from pyopencl.clrandom import rand as clrand
+
+    for a_dtype, b_dtype in product(dtypes, dtypes):
+        l = 16
+
+        np.random.seed(10)
+
+        int32_min = np.iinfo(np.int32).min
+        int32_max = np.iinfo(np.int32).max
+
+        a_dev = clrand(
+            queue, (l,), a=int32_min, b=1+int32_max, dtype=np.int64).astype(a_dtype)
+        b_dev = clrand(
+            queue, (l,), a=int32_min, b=1+int32_max, dtype=np.int64).astype(b_dtype)
+
+        a = a_dev.get()
+        b = b_dev.get()
+        s = int((clrand(queue, (), a=int32_min, b=1+int32_max, dtype=np.int64)
+                 .astype(b_dtype).get()))
+
+        import operator as o
+
+        for op in [o.and_, o.or_, o.xor]:
+            res_dev = op(a_dev, b_dev)
+            res = op(a, b)
+
+            assert (res_dev.get() == res).all()
+
+            res_dev = op(a_dev, s)
+            res = op(a, s)
+
+            assert (res_dev.get() == res).all()
+
+            res_dev = op(s, b_dev)
+            res = op(s, b)
+
+            assert (res_dev.get() == res).all()
+
+        for op in [o.iand, o.ior, o.ixor]:
+            res_dev = a_dev.copy()
+            op(res_dev, b_dev)
+            res = a.copy()
+            op(res, b)
+
+            assert (res_dev.get() == res).all()
+
+            res_dev = a_dev.copy()
+            op(res_dev, s)
+            res = a.copy()
+            op(res, s)
+
+            assert (res_dev.get() == res).all()
+
+        # Test unary ~
+        res_dev = ~a_dev
+        res = ~a
+        assert (res_dev.get() == res).all()
 
 # }}}
 
@@ -922,12 +1079,12 @@ def test_squeeze(ctx_factory):
     # Slice with length 1 on dimensions 0 and 1
     a_gpu_slice = a_gpu[0:1, 1:2, :, :]
     assert a_gpu_slice.shape == (1, 1, shape[2], shape[3])
-    assert a_gpu_slice.flags.c_contiguous is False
+    assert a_gpu_slice.flags.c_contiguous
 
     # Squeeze it and obtain contiguity
     a_gpu_squeezed_slice = a_gpu[0:1, 1:2, :, :].squeeze()
     assert a_gpu_squeezed_slice.shape == (shape[2], shape[3])
-    assert a_gpu_squeezed_slice.flags.c_contiguous is True
+    assert a_gpu_squeezed_slice.flags.c_contiguous
 
     # Check that we get the original values out
     #assert np.all(a_gpu_slice.get().ravel() == a_gpu_squeezed_slice.get().ravel())
@@ -935,15 +1092,90 @@ def test_squeeze(ctx_factory):
     # Slice with length 1 on dimensions 2
     a_gpu_slice = a_gpu[:, :, 2:3, :]
     assert a_gpu_slice.shape == (shape[0], shape[1], 1, shape[3])
-    assert a_gpu_slice.flags.c_contiguous is False
+    assert not a_gpu_slice.flags.c_contiguous
 
     # Squeeze it, but no contiguity here
     a_gpu_squeezed_slice = a_gpu[:, :, 2:3, :].squeeze()
     assert a_gpu_squeezed_slice.shape == (shape[0], shape[1], shape[3])
-    assert a_gpu_squeezed_slice.flags.c_contiguous is False
+    assert not a_gpu_squeezed_slice.flags.c_contiguous
 
     # Check that we get the original values out
     #assert np.all(a_gpu_slice.get().ravel() == a_gpu_squeezed_slice.get().ravel())
+
+
+def test_fancy_fill(ctx_factory):
+    if _PYPY:
+        pytest.xfail("numpypy: multi value setting is not supported")
+    context = ctx_factory()
+    queue = cl.CommandQueue(context)
+
+    numpy_dest = np.zeros((4,), np.int32)
+    numpy_idx = np.arange(3, dtype=np.int32)
+    numpy_src = np.arange(8, 9, dtype=np.int32)
+    numpy_dest[numpy_idx] = numpy_src
+
+    cl_dest = cl_array.zeros(queue, (4,), np.int32)
+    cl_idx = cl_array.arange(queue, 3, dtype=np.int32)
+    cl_src = cl_array.arange(queue, 8, 9, dtype=np.int32)
+    cl_dest[cl_idx] = cl_src
+
+    assert np.all(numpy_dest == cl_dest.get())
+
+
+def test_fancy_indexing(ctx_factory):
+    if _PYPY:
+        pytest.xfail("numpypy: multi value setting is not supported")
+    context = ctx_factory()
+    queue = cl.CommandQueue(context)
+
+    numpy_dest = np.zeros((4,), np.int32)
+    numpy_idx = np.arange(3, 0, -1, dtype=np.int32)
+    numpy_src = np.arange(8, 10, dtype=np.int32)
+    numpy_dest[numpy_idx] = numpy_src
+
+    cl_dest = cl_array.zeros(queue, (4,), np.int32)
+    cl_idx = cl_array.arange(queue, 3, 0, -1, dtype=np.int32)
+    cl_src = cl_array.arange(queue, 8, 10, dtype=np.int32)
+    cl_dest[cl_idx] = cl_src
+
+    assert np.all(numpy_dest == cl_dest.get())
+
+    cl_idx[1] = 3
+    cl_idx[2] = 2
+
+    numpy_idx[1] = 3
+    numpy_idx[2] = 2
+
+    numpy_dest[numpy_idx] = numpy_src
+    cl_dest[cl_idx] = cl_src
+
+    assert np.all(numpy_dest == cl_dest.get())
+
+
+def test_multi_put(ctx_factory):
+    if _PYPY:
+        pytest.xfail("numpypy: multi value setting is not supported")
+
+    context = ctx_factory()
+    queue = cl.CommandQueue(context)
+
+    cl_arrays = [
+        cl_array.arange(queue, 0, 3, dtype=np.float32)
+        for i in range(1, 10)
+    ]
+    idx = cl_array.arange(queue, 0, 6, dtype=np.int32)
+    out_arrays = [
+        cl_array.zeros(queue, (10,), np.float32)
+        for i in range(9)
+    ]
+
+    out_compare = [np.zeros((10,), np.float32) for i in range(9)]
+    for i, ary in enumerate(out_compare):
+        ary[idx.get()] = np.arange(0, 3, dtype=np.float32)
+
+    cl_array.multi_put(cl_arrays, idx, out=out_arrays)
+
+    assert np.all(np.all(out_compare[i] == out_arrays[i].get()) for i in range(9))
 
 
 if __name__ == "__main__":

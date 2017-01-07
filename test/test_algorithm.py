@@ -511,6 +511,7 @@ def summarize_error(obtained, desired, orig, thresh=1e-5):
 
     return " ".join(entries)
 
+
 scan_test_counts = [
     10,
     2 ** 8 - 1,
@@ -926,6 +927,14 @@ def test_bitonic_sort(ctx_factory, size, dtype):
     ])
 @pytest.mark.bitonic
 def test_bitonic_argsort(ctx_factory, size, dtype):
+    import sys
+    is_pypy = '__pypy__' in sys.builtin_module_names
+
+    if not size and is_pypy:
+        # https://bitbucket.org/pypy/numpy/issues/53/specifying-strides-on-zero-sized-array
+        pytest.xfail("pypy doesn't seem to handle as_strided "
+                "on zero-sized arrays very well")
+
     ctx = cl.create_some_context()
     queue = cl.CommandQueue(ctx)
 

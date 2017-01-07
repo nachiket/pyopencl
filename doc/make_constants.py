@@ -32,6 +32,7 @@ cl_11 = ("CL_1.1", "0.92")
 cl_12 = ("CL_1.2", "2011.2")
 cl_12_2015 = ("CL_1.2", "2015.2")
 cl_20 = ("CL_2.0", "2015.2")
+cl_21 = ("CL_2.1", "2016.2")
 amd_devattr = ("cl_amd_device_attribute_query", "2013.2")
 qcom_hp_devattr = ("cl_qcom_ext_host_ptr", "2016.2")
 intel_me_devattr = ("cl_intel_advanced_motion_estimation", "2016.2")
@@ -129,14 +130,14 @@ const_ext_lookup = {
             "GFXIP_MAJOR_AMD": amd_devattr,
             "GFXIP_MINOR_AMD": amd_devattr,
             "AVAILABLE_ASYNC_QUEUES_AMD": amd_devattr,
-            
+
             "ME_VERSION_INTEL": intel_me_devattr,
             "SIMULTANEOUS_INTEROPS_INTEL": intel_ss_devattr,
             "NUM_SIMULTANEOUS_INTEROPS_INTEL": intel_ss_devattr,
-            
+
             "EXT_MEM_PADDING_IN_BYTES_QCOM": qcom_hp_devattr,
             "PAGE_SIZE_QCOM": qcom_hp_devattr,
-            
+
             "CORE_TEMPERATURE_ALTERA": altera_temp_devattr,
 
             "MAX_ATOMIC_COUNTERS_EXT":
@@ -182,6 +183,9 @@ const_ext_lookup = {
             "PREFERRED_PLATFORM_ATOMIC_ALIGNMENT": cl_20,
             "PREFERRED_GLOBAL_ATOMIC_ALIGNMENT": cl_20,
             "PREFERRED_LOCAL_ATOMIC_ALIGNMENT": cl_20,
+            "IL_VERSION": cl_21,
+            "MAX_NUM_SUB_GROUPS": cl_21,
+            "SUB_GROUP_INDEPENDENT_FORWARD_PROGRESS": cl_21,
             },
 
         cl.mem_object_type: {
@@ -462,7 +466,14 @@ if not cl.have_gl():
     print("    was generated on a PyOpenCL build that did not support OpenGL.")
     print()
 
+import inspect
+
+CONSTANT_CLASSES = [
+        getattr(cl, name) for name in dir(cl)
+        if inspect.isclass(getattr(cl, name))
+        and name[0].islower() and name not in ["zip", "map", "range"]]
+
 print(".. This is an automatically generated file. DO NOT EDIT")
 print()
-for cls in cl.CONSTANT_CLASSES:
+for cls in CONSTANT_CLASSES:
     doc_class(cls)

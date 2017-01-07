@@ -142,7 +142,8 @@ error* enqueue_svm_memcpy(
     clobj_t *evt, clobj_t _queue,
     cl_bool is_blocking,
     void *dst_ptr, const void *src_ptr, size_t size,
-    const clobj_t *_wait_for, uint32_t num_wait_for);
+    const clobj_t *_wait_for, uint32_t num_wait_for,
+    void *pyobj);
 error* enqueue_svm_memfill(
     clobj_t *evt, clobj_t _queue,
     void *svm_ptr,
@@ -171,6 +172,7 @@ error* enqueue_svm_migrate_mem(
 
 error *create_program_with_source(clobj_t *program, clobj_t context,
                                   const char *src);
+error* create_program_with_il(clobj_t *prog, clobj_t _ctx, void *il, size_t length);
 error *create_program_with_binary(clobj_t *program, clobj_t context,
                                   cl_uint num_devices, const clobj_t *devices,
                                   const unsigned char **binaries,
@@ -210,6 +212,7 @@ error *kernel__set_arg_sampler(clobj_t kernel, cl_uint arg_index,
                                clobj_t sampler);
 error *kernel__set_arg_buf(clobj_t kernel, cl_uint arg_index,
                            const void *buffer, size_t size);
+error *kernel__set_arg_svm_pointer(clobj_t kernel, cl_uint arg_index, void *value);
 error *kernel__get_work_group_info(clobj_t kernel,
                                    cl_kernel_work_group_info param,
                                    clobj_t device, generic_info *out);

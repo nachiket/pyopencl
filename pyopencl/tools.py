@@ -53,6 +53,7 @@ def _register_types():
     get_or_register_dtype("cfloat_t", np.complex64)
     get_or_register_dtype("cdouble_t", np.complex128)
 
+
 _register_types()
 
 
@@ -96,6 +97,7 @@ def first_arg_dependent_memoize(func, cl_object, *args):
         result = func(cl_object, *args)
         arg_dict[args] = result
         return result
+
 
 context_dependent_memoize = first_arg_dependent_memoize
 
@@ -158,6 +160,7 @@ def clear_first_arg_caches():
     """
     for cache in _first_arg_dependent_caches:
         cache.clear()
+
 
 import atexit
 atexit.register(clear_first_arg_caches)
@@ -455,7 +458,7 @@ class _CDeclList:
         if dtype in vec.type_to_scalar_and_count:
             return
 
-        for name, field_data in six.iteritems(dtype.fields):
+        for name, field_data in sorted(six.iteritems(dtype.fields)):
             field_dtype, offset = field_data[:2]
             self.add_dtype(field_dtype)
 
@@ -537,7 +540,8 @@ def match_dtype_to_c_struct(device, name, dtype, context=None):
             key=lambda name_dtype_offset: name_dtype_offset[1][1])
 
     c_fields = []
-    for field_name, (field_dtype, offset) in fields:
+    for field_name, dtype_and_offset in fields:
+        field_dtype, offset = dtype_and_offset[:2]
         c_fields.append("  %s %s;" % (dtype_to_ctype(field_dtype), field_name))
 
     c_decl = "typedef struct {\n%s\n} %s;\n\n" % (
@@ -545,25 +549,26 @@ def match_dtype_to_c_struct(device, name, dtype, context=None):
             name)
 
     cdl = _CDeclList(device)
-    for field_name, (field_dtype, offset) in fields:
+    for field_name, dtype_and_offset in fields:
+        field_dtype, offset = dtype_and_offset[:2]
         cdl.add_dtype(field_dtype)
 
     pre_decls = cdl.get_declarations()
 
     offset_code = "\n".join(
             "result[%d] = pycl_offsetof(%s, %s);" % (i+1, name, field_name)
-            for i, (field_name, (field_dtype, offset)) in enumerate(fields))
+            for i, (field_name, _) in enumerate(fields))
 
     src = r"""
         #define pycl_offsetof(st, m) \
-                 ((size_t) ((__local char *) &(dummy.m) \
+                 ((uint) ((__local char *) &(dummy.m) \
                  - (__local char *)&dummy ))
 
         %(pre_decls)s
 
         %(my_decl)s
 
-        __kernel void get_size_and_offsets(__global size_t *result)
+        __kernel void get_size_and_offsets(__global uint *result)
         {
             result[0] = sizeof(%(my_type)s);
             __local %(my_type)s dummy;
@@ -584,7 +589,7 @@ def match_dtype_to_c_struct(device, name, dtype, context=None):
     knl = prg.build(devices=[device]).get_size_and_offsets
 
     import pyopencl.array  # noqa
-    result_buf = cl.array.empty(queue, 1+len(fields), np.uintp)
+    result_buf = cl.array.empty(queue, 1+len(fields), np.uint32)
     knl(queue, (1,), (1,), result_buf.data)
     queue.finish()
     size_and_offsets = result_buf.get()
@@ -598,11 +603,15 @@ def match_dtype_to_c_struct(device, name, dtype, context=None):
 
         if dtype.itemsize == size:
             # If sizes match, use numpy's idea of the offsets.
-            offsets = [offset
-                    for field_name, (field_dtype, offset) in fields]
+            offsets = [dtype_and_offset[1]
+                    for field_name, dtype_and_offset in fields]
         else:
             raise RuntimeError(
-                    "cannot discover struct layout on '%s'" % device)
+                    "OpenCL compiler reported offsetof() past sizeof() "
+                    "for struct layout on '%s'. "
+                    "This makes no sense, and it's usually indicates a "
+                    "compiler bug. "
+                    "Refusing to discover struct layout." % device)
 
     result_buf.data.release()
     del knl
@@ -646,6 +655,14 @@ def match_dtype_to_c_struct(device, name, dtype, context=None):
 
 @memoize
 def dtype_to_c_struct(device, dtype):
+    if dtype.fields is None:
+        return ""
+
+    from pyopencl.array import vec
+    if dtype in vec.type_to_scalar_and_count:
+        # Vector types are built-in. Don't try to redeclare those.
+        return ""
+
     matched_dtype, c_decl = match_dtype_to_c_struct(
             device, dtype_to_ctype(dtype), dtype)
 
@@ -829,12 +846,12 @@ class _TemplateRenderer(object):
         if arguments is not None:
             cdl.visit_arguments(arguments)
 
-        for tv in six.itervalues(self.type_aliases):
+        for _, tv in sorted(six.iteritems(self.type_aliases)):
             cdl.add_dtype(tv)
 
         type_alias_decls = [
                 "typedef %s %s;" % (dtype_to_ctype(val), name)
-                for name, val in six.iteritems(self.type_aliases)
+                for name, val in sorted(six.iteritems(self.type_aliases))
                 ]
 
         return cdl.get_declarations() + "\n" + "\n".join(type_alias_decls)
@@ -930,5 +947,14 @@ def array_module(a):
             raise TypeError("array type not understood: %s" % type(a))
 
 # }}}
+
+
+def is_spirv(s):
+    spirv_magic = b"\x07\x23\x02\x03"
+    return (
+            isinstance(s, six.binary_type)
+            and (
+                s[:4] == spirv_magic
+                or s[:4] == spirv_magic[::-1]))
 
 # vim: foldmethod=marker
