@@ -67,14 +67,11 @@ def get_config_schema():
 
         default_ldflags = default_cxxflags[:] + ["-Wl,-framework,OpenCL"]
 
-#        default_libs = ["OpenCL"]
-#        default_ldflags = []
-
     else:
         default_libs = ["xilinxopencl"]
         default_libdir = ["/opt/Xilinx/SDAccel/2016.1/runtime/lib/x86_64"]
         default_incdir = ["/opt/Xilinx/SDAccel/2016.1/runtime/include"]
-        default_ldflags = []
+        #default_libs = ["OpenCL"]
 
     return ConfigSchema([
         Switch("CL_TRACE", False, "Enable OpenCL API tracing"),
