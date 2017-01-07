@@ -12,19 +12,19 @@
   - opengl
   except:
   - tags
-Python 2.7 Intel CPU:
+
+Python 3.5 Intel CPU:
   script:
-  - export PY_EXE=python2.7
+  - export PY_EXE=python3.5
   - export PYOPENCL_TEST="intel(r):pu"
   - export EXTRA_INSTALL="numpy mako"
   - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-and-test-py-project.sh
   - ". ./build-and-test-py-project.sh"
   tags:
-  - python2.7
+  - python3.5
   - intel-cl-cpu
   except:
   - tags
-  - master
 Python 3.5 AMD CPU:
   script:
   - export PY_EXE=python3.5
@@ -49,7 +49,8 @@ Python 2.6 AMD CPU:
   - amd-cl-cpu
   except:
   - tags
-Python 3.5 Titan Black:
+
+Python 3.5 Titan X:
   script:
   - export PY_EXE=python3.5
   - export PYOPENCL_TEST=nvi:titan
@@ -58,9 +59,10 @@ Python 3.5 Titan Black:
   - ". ./build-and-test-py-project.sh"
   tags:
   - python3.5
-  - nvidia-titan-black
+  - nvidia-titan-x
   except:
   - tags
+
 Python 3.5 K40:
   script:
   - export PY_EXE=python3.5
@@ -73,6 +75,7 @@ Python 3.5 K40:
   - nvidia-k40
   except:
   - tags
+
 Python 3.5 AMD GPU:
   script:
   - export PY_EXE=python3.5
@@ -85,6 +88,7 @@ Python 3.5 AMD GPU:
   - amd-fiji
   except:
   - tags
+
 Python 3.5 POCL CL 1.1:
   script:
   - export PY_EXE=python3.5
@@ -98,6 +102,7 @@ Python 3.5 POCL CL 1.1:
   - pocl
   except:
   - tags
+
 Python 2.7 POCL:
   script:
   - export PY_EXE=python2.7
@@ -110,6 +115,7 @@ Python 2.7 POCL:
   - pocl
   except:
   - tags
+
 Python 2.7 Apple:
   script:
   - export PY_EXE=python2.7
@@ -122,6 +128,7 @@ Python 2.7 Apple:
   - apple
   except:
   - tags
+
 PyPy POCL:
   script:
   - export PY_EXE=pypy
@@ -132,5 +139,24 @@ PyPy POCL:
   tags:
   - pypy
   - pocl
+  except:
+  - tags
+
+Documentation:
+  script:
+  - EXTRA_INSTALL="numpy mako"
+  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/build-docs.sh
+  - ". ./build-docs.sh"
+  tags:
+  - python3.5
+  only:
+  - master
+
+Flake8:
+  script:
+  - curl -L -O -k https://gitlab.tiker.net/inducer/ci-support/raw/master/prepare-and-run-flake8.sh
+  - ". ./prepare-and-run-flake8.sh pyopencl test"
+  tags:
+  - python3.5
   except:
   - tags

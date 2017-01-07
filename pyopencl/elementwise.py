@@ -36,7 +36,7 @@ import numpy as np
 import pyopencl as cl
 from pytools import memoize_method
 from pyopencl.tools import (dtype_to_ctype, VectorArg, ScalarArg,
-        KernelTemplateBase)
+        KernelTemplateBase, dtype_to_c_struct)
 
 
 # {{{ elementwise kernel code generator
@@ -381,7 +381,9 @@ def get_take_kernel(context, dtype, idx_dtype, vec_count=1):
                 "dest%d[i] = src%d[src_idx];" % (i, i)
                 for i in range(vec_count)))
 
-    return get_elwise_kernel(context, args, body, name="take")
+    return get_elwise_kernel(context, args, body,
+            preamble=dtype_to_c_struct(context.devices[0], dtype),
+            name="take")
 
 
 @context_dependent_memoize
@@ -419,7 +421,9 @@ def get_take_put_kernel(context, dtype, idx_dtype, with_offsets, vec_count=1):
                 "%(idx_tp)s dest_idx = gmem_dest_idx[i];\n" % ctx)
             + "\n".join(get_copy_insn(i) for i in range(vec_count)))
 
-    return get_elwise_kernel(context, args, body, name="take_put")
+    return get_elwise_kernel(context, args, body,
+            preamble=dtype_to_c_struct(context.devices[0], dtype),
+            name="take_put")
 
 
 @context_dependent_memoize
@@ -437,14 +441,24 @@ def get_put_kernel(context, dtype, idx_dtype, vec_count=1):
             ] + [
                 VectorArg(dtype, "src%d" % i, with_offset=True)
                 for i in range(vec_count)
+            ] + [
+                VectorArg(np.uint8, "use_fill", with_offset=True)
+            ] + [
+                VectorArg(np.int64, "val_ary_lengths", with_offset=True)
             ]
 
     body = (
             "%(idx_tp)s dest_idx = gmem_dest_idx[i];\n" % ctx
-            + "\n".join("dest%d[dest_idx] = src%d[i];" % (i, i)
-                for i in range(vec_count)))
+            + "\n".join(
+                    "dest{i}[dest_idx] = (use_fill[{i}] ? src{i}[0] : "
+                    "src{i}[i % val_ary_lengths[{i}]]);".format(i=i)
+                    for i in range(vec_count)
+                    )
+            )
 
-    return get_elwise_kernel(context, args, body, name="put")
+    return get_elwise_kernel(context, args, body,
+            preamble=dtype_to_c_struct(context.devices[0], dtype),
+            name="put")
 
 
 @context_dependent_memoize
@@ -456,12 +470,17 @@ def get_copy_kernel(context, dtype_dest, dtype_src):
     if dtype_dest.kind == "c" and dtype_src != dtype_dest:
         src = "%s_cast(%s)" % (complex_dtype_to_name(dtype_dest), src),
 
+    if dtype_dest != dtype_src and (
+            dtype_dest.kind == "V" or dtype_src.kind == "V"):
+        raise TypeError("copying between non-identical struct types")
+
     return get_elwise_kernel(context,
             "%(tp_dest)s *dest, %(tp_src)s *src" % {
                 "tp_dest": dtype_to_ctype(dtype_dest),
                 "tp_src": dtype_to_ctype(dtype_src),
                 },
             "dest[i] = %s" % src,
+            preamble=dtype_to_c_struct(context.devices[0], dtype_dest),
             name="copy")
 
 
@@ -740,6 +759,7 @@ def get_fill_kernel(context, dtype):
                 "tp": dtype_to_ctype(dtype),
                 },
             "z[i] = a",
+            preamble=dtype_to_c_struct(context.devices[0], dtype),
             name="fill")
 
 
@@ -820,6 +840,38 @@ def get_pow_kernel(context, dtype_x, dtype_y, dtype_z,
                 },
             "z[i] = %s" % result,
             name="pow_method")
+
+
+@context_dependent_memoize
+def get_unop_kernel(context, operator, res_dtype, in_dtype):
+    return get_elwise_kernel(context, [
+        VectorArg(res_dtype, "z", with_offset=True),
+        VectorArg(in_dtype, "y", with_offset=True),
+        ],
+        "z[i] = %s y[i]" % operator,
+        name="unary_op_kernel")
+
+
+@context_dependent_memoize
+def get_array_scalar_binop_kernel(context, operator, dtype_res, dtype_a, dtype_b):
+    return get_elwise_kernel(context, [
+        VectorArg(dtype_res, "out", with_offset=True),
+        VectorArg(dtype_a, "a", with_offset=True),
+        ScalarArg(dtype_b, "b"),
+        ],
+        "out[i] = a[i] %s b" % operator,
+        name="scalar_binop_kernel")
+
+
+@context_dependent_memoize
+def get_array_binop_kernel(context, operator, dtype_res, dtype_a, dtype_b):
+    return get_elwise_kernel(context, [
+        VectorArg(dtype_res, "out", with_offset=True),
+        VectorArg(dtype_a, "a", with_offset=True),
+        VectorArg(dtype_b, "b", with_offset=True),
+        ],
+        "out[i] = a[i] %s b[i]" % operator,
+        name="binop_kernel")
 
 
 @context_dependent_memoize

@@ -4,13 +4,6 @@ Installation
 Installation information is maintained collaboratively on the
 `PyOpenCL Wiki <http://wiki.tiker.net/PyOpenCL/Installation>`_.
 
-Acknowledgments
-===============
-
-Too many to list. Please see the
-`commit log <https://github.com/pyopencl/pyopencl/commits/master>`_
-for detailed acknowledgments.
-
 Tips
 ====
 
@@ -110,7 +103,7 @@ other software to be turned into the corresponding :mod:`pyopencl` objects.
 User-visible Changes
 ====================
 
-Version 2016.2
+Version 2016.3
 --------------
 
 .. note::
@@ -118,11 +111,17 @@ Version 2016.2
     This version is currently under development. You can get snapshots from
     PyOpenCL's `git repository <https://github.com/pyopencl/pyopencl>`_
 
+Version 2016.2
+--------------
+
 * Deprecate RANLUXCL. It will be removed in the 2018.x series of PyOpenCL.
 * Introduce Random123 random number generators. See :mod:`pyopencl.clrandom`
   for more information.
 * Add support for **range** and **slice** kwargs and data-less reductions
   to :class:`pyopencl.reduction.ReductionKernel`.
+* Add support for SPIR-V. (See :class:`pyopencl.Program`.)
+* Add support for :ref:`svm`.
+* :class:`pyopencl.MemoryMap` is usable as a context manager.
 
 Version 2016.1
 --------------
@@ -504,3 +503,24 @@ Here's a Bibtex entry for your convenience::
        doi = "10.1016/j.parco.2011.09.001",
     }
 
+Acknowledgments
+===============
+
+Contributors
+------------
+
+Too many to list. Please see the
+`commit log <https://github.com/pyopencl/pyopencl/commits/master>`_
+for detailed acknowledgments.
+
+Funding
+-------
+
+Andreas Klöckner's work on :mod:`pyopencl` was supported in part by
+
+* US Navy ONR grant number N00014-14-1-0117
+* the US National Science Foundation under grant numbers DMS-1418961 and CCF-1524433.
+
+AK also gratefully acknowledges a hardware gift from Nvidia Corporation.  The
+views and opinions expressed herein do not necessarily reflect those of the
+funding agencies.

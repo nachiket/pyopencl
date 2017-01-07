@@ -38,6 +38,7 @@ from pyopencl.compyte.array import (
         as_strided as _as_strided,
         f_contiguous_strides as _f_contiguous_strides,
         c_contiguous_strides as _c_contiguous_strides,
+        equal_strides as _equal_strides,
         ArrayFlags as _ArrayFlags,
         get_common_dtype as _get_common_dtype_base)
 from pyopencl.characterize import has_double_support
@@ -46,6 +47,7 @@ from pyopencl.characterize import has_double_support
 def _get_common_dtype(obj1, obj2, queue):
     return _get_common_dtype_base(obj1, obj2,
             has_double_support(queue.device))
+
 
 # Work around PyPy not currently supporting the object dtype.
 # (Yes, it doesn't even support checking!)
@@ -148,6 +150,7 @@ def _create_vector_types():
 
             vec.types[np.dtype(base_type), count] = dtype
             vec.type_to_scalar_and_count[dtype] = np.dtype(base_type), count
+
 
 _create_vector_types()
 
@@ -392,7 +395,15 @@ class Array(object):
     .. automethod :: __rdiv__
     .. automethod :: __pow__
 
+    .. automethod :: __and__
+    .. automethod :: __xor__
+    .. automethod :: __or__
+    .. automethod :: __iand__
+    .. automethod :: __ixor__
+    .. automethod :: __ior__
+
     .. automethod :: __abs__
+    .. automethod :: __invert__
 
     .. UNDOC reverse()
 
@@ -649,9 +660,7 @@ class Array(object):
         if not ary.flags.forc:
             raise RuntimeError("cannot set from non-contiguous array")
 
-            ary = ary.copy()
-
-        if ary.strides != self.strides:
+        if not _equal_strides(ary.strides, self.strides, self.shape):
             from warnings import warn
             warn("Setting array from one with different "
                     "strides/storage order. This will cease to work "
@@ -863,6 +872,29 @@ class Array(object):
             return self.__class__(self.context, self.shape, dtype,
                     strides=strides, allocator=self.allocator)
 
+    @staticmethod
+    @elwise_kernel_runner
+    def _scalar_binop(out, a, b, queue=None, op=None):
+        return elementwise.get_array_scalar_binop_kernel(
+                out.context, op, out.dtype, a.dtype,
+                np.array(b).dtype)
+
+    @staticmethod
+    @elwise_kernel_runner
+    def _array_binop(out, a, b, queue=None, op=None):
+        if a.shape != b.shape:
+            raise ValueError("shapes of binop arguments do not match")
+        return elementwise.get_array_binop_kernel(
+                out.context, op, out.dtype, a.dtype, b.dtype)
+
+    @staticmethod
+    @elwise_kernel_runner
+    def _unop(out, a, queue=None, op=None):
+        if out.shape != a.shape:
+            raise ValueError("shapes of arguments do not match")
+        return elementwise.get_unop_kernel(
+                out.context, op, a.dtype, out.dtype)
+
     # }}}
 
     # {{{ operators
@@ -1042,11 +1074,119 @@ class Array(object):
 
     __rtruediv__ = __rdiv__
 
+    def __and__(self, other):
+        common_dtype = _get_common_dtype(self, other, self.queue)
+
+        if not np.issubdtype(common_dtype, np.integer):
+            raise TypeError("Integral types only")
+
+        if isinstance(other, Array):
+            result = self._new_like_me(common_dtype)
+            result.add_event(self._array_binop(result, self, other, op="&"))
+        else:
+            # create a new array for the result
+            result = self._new_like_me(common_dtype)
+            result.add_event(
+                    self._scalar_binop(result, self, other, op="&"))
+
+        return result
+
+    __rand__ = __and__  # commutes
+
+    def __or__(self, other):
+        common_dtype = _get_common_dtype(self, other, self.queue)
+
+        if not np.issubdtype(common_dtype, np.integer):
+            raise TypeError("Integral types only")
+
+        if isinstance(other, Array):
+            result = self._new_like_me(common_dtype)
+            result.add_event(self._array_binop(result, self, other, op="|"))
+        else:
+            # create a new array for the result
+            result = self._new_like_me(common_dtype)
+            result.add_event(
+                    self._scalar_binop(result, self, other, op="|"))
+
+        return result
+
+    __ror__ = __or__  # commutes
+
+    def __xor__(self, other):
+        common_dtype = _get_common_dtype(self, other, self.queue)
+
+        if not np.issubdtype(common_dtype, np.integer):
+            raise TypeError("Integral types only")
+
+        if isinstance(other, Array):
+            result = self._new_like_me(common_dtype)
+            result.add_event(self._array_binop(result, self, other, op="^"))
+        else:
+            # create a new array for the result
+            result = self._new_like_me(common_dtype)
+            result.add_event(
+                    self._scalar_binop(result, self, other, op="^"))
+
+        return result
+
+    __rxor__ = __xor__  # commutes
+
+    def __iand__(self, other):
+        common_dtype = _get_common_dtype(self, other, self.queue)
+
+        if not np.issubdtype(common_dtype, np.integer):
+            raise TypeError("Integral types only")
+
+        if isinstance(other, Array):
+            self.add_event(self._array_binop(self, self, other, op="&"))
+        else:
+            self.add_event(
+                    self._scalar_binop(self, self, other, op="&"))
+
+    def __ior__(self, other):
+        common_dtype = _get_common_dtype(self, other, self.queue)
+
+        if not np.issubdtype(common_dtype, np.integer):
+            raise TypeError("Integral types only")
+
+        if isinstance(other, Array):
+            self.add_event(self._array_binop(self, self, other, op="|"))
+        else:
+            self.add_event(
+                    self._scalar_binop(self, self, other, op="|"))
+
+    def __ixor__(self, other):
+        common_dtype = _get_common_dtype(self, other, self.queue)
+
+        if not np.issubdtype(common_dtype, np.integer):
+            raise TypeError("Integral types only")
+
+        if isinstance(other, Array):
+            self.add_event(self._array_binop(self, self, other, op="^"))
+        else:
+            self.add_event(
+                    self._scalar_binop(self, self, other, op="^"))
+
+    def _zero_fill(self, queue=None, wait_for=None):
+        queue = queue or self.queue
+
+        if (
+                queue._get_cl_version() >= (1, 2)
+                and cl.get_cl_header_version() >= (1, 2)):
+
+            self.add_event(
+                    cl.enqueue_fill_buffer(queue, self.base_data, np.int8(0),
+                        self.offset, self.nbytes, wait_for=wait_for))
+        else:
+            zero = np.zeros((), self.dtype)
+            self.fill(zero, queue=queue)
+
     def fill(self, value, queue=None, wait_for=None):
         """Fill the array with *scalar*.
 
         :returns: *self*.
         """
+
         self.add_event(
                 self._fill(self, value, queue=queue, wait_for=wait_for))
 
@@ -1093,6 +1233,15 @@ class Array(object):
         result = self._new_like_me(common_dtype)
         result.add_event(
                 self._rpow_scalar(result, common_dtype.type(other), self))
+        return result
+
+    def __invert__(self):
+        if not np.issubdtype(self.dtype, np.integer):
+            raise TypeError("Integral types only")
+
+        result = self._new_like_me()
+        result.add_event(self._unop(result, self, op="~"))
+
         return result
 
     # }}}
@@ -1636,6 +1785,8 @@ class Array(object):
             Added *wait_for*.
         """
 
+        queue = queue or self.queue or value.queue
+
         if isinstance(subscript, Array):
             if subscript.dtype.kind != "i":
                 raise TypeError(
@@ -1645,13 +1796,11 @@ class Array(object):
                         "multidimensional fancy indexing is not supported")
             if len(self.shape) != 1:
                 raise NotImplementedError(
-                        "fancy indexing into a multi-d array is supported")
+                        "fancy indexing into a multi-d array is not supported")
 
-            multi_put([value], subscript, out=[self], queue=self.queue,
+            multi_put([value], subscript, out=[self], queue=queue,
                     wait_for=wait_for)
             return
-
-        queue = queue or self.queue or value.queue
 
         subarray = self[subscript]
 
@@ -1724,7 +1873,7 @@ def as_strided(ary, shape=None, strides=None):
 
 # {{{ creation helpers
 
-class _same_as_transfer(object):
+class _same_as_transfer(object):  # noqa
     pass
 
 
@@ -1771,8 +1920,7 @@ def zeros(queue, shape, dtype, order="C", allocator=None):
 
     result = Array(queue, shape, dtype,
             order=order, allocator=allocator)
-    zero = np.zeros((), dtype)
-    result.fill(zero)
+    result._zero_fill()
     return result
 
 
@@ -1791,8 +1939,7 @@ def zeros_like(ary):
     """
 
     result = empty_like(ary)
-    zero = np.zeros((), ary.dtype)
-    result.fill(zero)
+    result._zero_fill()
     return result
 
 
@@ -2083,16 +2230,29 @@ def multi_put(arrays, dest_indices, dest_shape=None, out=None, queue=None,
 
     chunk_size = _builtin_min(vec_count, 10)
 
+    # array of bools to specify whether the array of same index in this chunk
+    # will be filled with a single value.
+    use_fill = np.ndarray((chunk_size,), dtype=np.uint8)
+    array_lengths = np.ndarray((chunk_size,), dtype=np.int64)
+
     def make_func_for_chunk_size(chunk_size):
         knl = elementwise.get_put_kernel(
-                context,
-                a_dtype, dest_indices.dtype, vec_count=chunk_size)
+                context, a_dtype, dest_indices.dtype,
+                vec_count=chunk_size)
         return knl
 
     knl = make_func_for_chunk_size(chunk_size)
 
     for start_i in range(0, len(arrays), chunk_size):
         chunk_slice = slice(start_i, start_i+chunk_size)
+        for fill_idx, ary in enumerate(arrays[chunk_slice]):
+            # If there is only one value in the values array for this src array
+            # in the chunk then fill every index in `dest_idx` array with it.
+            use_fill[fill_idx] = 1 if ary.size == 1 else 0
+            array_lengths[fill_idx] = len(ary)
+        # Copy the populated `use_fill` array to a buffer on the device.
+        use_fill_cla = to_device(queue, use_fill)
+        array_lengths_cla = to_device(queue, array_lengths)
 
         if start_i + chunk_size > vec_count:
             knl = make_func_for_chunk_size(vec_count-start_i)
@@ -2112,6 +2272,8 @@ def multi_put(arrays, dest_indices, dest_shape=None, out=None, queue=None,
                     + list(flatten(
                         (i.base_data, i.offset)
                         for i in arrays[chunk_slice]))
+                    + [use_fill_cla.base_data, use_fill_cla.offset]
+                    + [array_lengths_cla.base_data, array_lengths_cla.offset]
                     + [dest_indices.size]),
                 **dict(wait_for=wait_for))
 
@@ -2348,6 +2510,7 @@ def _make_minmax_kernel(what):
 
     return f
 
+
 min = _make_minmax_kernel("min")
 min.__doc__ = """
     .. versionadded:: 2011.1
@@ -2366,6 +2529,7 @@ def _make_subset_minmax_kernel(what):
         return krnl(subset, a,  queue=queue, slice=slice)
 
     return f
+
 
 subset_min = _make_subset_minmax_kernel("min")
 subset_min.__doc__ = """.. versionadded:: 2011.1"""

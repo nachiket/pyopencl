@@ -81,7 +81,11 @@
 #define PYOPENCL_CL_VERSION PYOPENCL_PRETEND_CL_VERSION
 #else
 
-#if defined(CL_VERSION_2_0)
+#if defined(CL_VERSION_2_2)
+#define PYOPENCL_CL_VERSION 0x2020
+#elif defined(CL_VERSION_2_1)
+#define PYOPENCL_CL_VERSION 0x2010
+#elif defined(CL_VERSION_2_0)
 #define PYOPENCL_CL_VERSION 0x2000
 #elif defined(CL_VERSION_1_2)
 #define PYOPENCL_CL_VERSION 0x1020
@@ -126,6 +130,13 @@ typedef struct _cl_image_desc {
 } cl_image_desc;
 
 typedef cl_bitfield cl_mem_migration_flags;
+#endif
+
+#ifndef CL_VERSION_1_1
+typedef struct _cl_buffer_region {
+    size_t                  origin;
+    size_t                  size;
+} cl_buffer_region;
 #endif
 
 #ifndef cl_ext_migrate_memobject
