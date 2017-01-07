@@ -53,6 +53,7 @@ def get_config_schema():
 
         default_libs = []
         default_libdir = []
+        default_incdir = []
         default_cxxflags = default_cxxflags + [
                 '-stdlib=libc++', '-mmacosx-version-min=10.7',
                 '-arch', 'i386', '-arch', 'x86_64'
@@ -66,13 +67,14 @@ def get_config_schema():
 
         default_ldflags = default_cxxflags[:] + ["-Wl,-framework,OpenCL"]
 
-#        default_libs = ["OpenCL"]
-#        default_ldflags = []
-
     else:
         default_libs = ["alterahalmmd","altera_apb_14_0_mmd","alteracl","elf"]
-        default_libdir = ["/opt/altera/16.0/hld/board/terasic/de5net/linux64/lib","/opt/altera/16.0/hld/host/linux64/lib"]
+        default_libdir = [
+                "/opt/altera/16.0/hld/board/terasic/de5net/linux64/lib",
+                "/opt/altera/16.0/hld/host/linux64/lib"]
         default_ldflags = ["-Wl,--no-as-needed"]
+        default_incdir = []
+#        default_libs = ["OpenCL"]
 
     return ConfigSchema([
         Switch("CL_TRACE", False, "Enable OpenCL API tracing"),
@@ -85,7 +87,7 @@ def get_config_schema():
         Option("CL_PRETEND_VERSION", None,
             "Dotted CL version (e.g. 1.2) which you'd like to use."),
 
-        IncludeDir("CL", []),
+        IncludeDir("CL", default_incdir),
         LibraryDir("CL", default_libdir),
         Libraries("CL", default_libs),
 
