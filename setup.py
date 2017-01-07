@@ -68,9 +68,10 @@ def get_config_schema():
         default_ldflags = default_cxxflags[:] + ["-Wl,-framework,OpenCL"]
 
     else:
-        default_libs = ["alterahalmmd","altera_apb_14_0_mmd","alteracl","elf"]
+        default_libs = ["alterahalmmd","alteracl","elf"]
         default_libdir = [
                 "/opt/altera/16.0/hld/board/terasic/de5net/linux64/lib",
+                "/opt/altera/16.0/hld/board/terasic/s5_ref/linux64/lib",
                 "/opt/altera/16.0/hld/host/linux64/lib"]
         default_ldflags = ["-Wl,--no-as-needed"]
         default_incdir = []
