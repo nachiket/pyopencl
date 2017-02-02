@@ -31,7 +31,7 @@ THE SOFTWARE.
 
 
 import sys
-
+import os
 
 def get_config_schema():
     from aksetup_helper import ConfigSchema, Option, \
@@ -69,8 +69,8 @@ def get_config_schema():
 
     else:
         default_libs = ["xilinxopencl"]
-        default_libdir = ["/opt/Xilinx/SDAccel/2016.2/runtime/lib/x86_64"]
-        default_incdir = ["/opt/Xilinx/SDAccel/2016.2/runtime/include"]
+        default_libdir = ["/opt/Xilinx/SDx/2016.3/runtime/lib/x86_64"]
+        default_incdir = ["/opt/Xilinx/SDx/2016.3/runtime/include"]
         default_ldflags = ["-Wl,--no-as-needed"]
         #default_libs = ["OpenCL"]
 

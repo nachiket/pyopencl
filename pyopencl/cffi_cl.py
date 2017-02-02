@@ -667,7 +667,7 @@ def unload_platform_compiler(plat):
 
 
 def get_platforms():
-    print("Hi",os.environ['LD_LIBRARY_PATH'])
+#    print("Hi",os.environ['LD_LIBRARY_PATH'])
     platforms = _CArray(_ffi.new('clobj_t**'))
     _handle_error(_lib.get_platforms(platforms.ptr, platforms.size))
     return [Platform._create(platforms.ptr[0][i])
