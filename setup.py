@@ -68,11 +68,13 @@ def get_config_schema():
         default_ldflags = default_cxxflags[:] + ["-Wl,-framework,OpenCL"]
 
     else:
-        default_libs = ["alterahalmmd","alteracl","elf"]
+        default_libs = ["alterahalmmd","alteracl","elf","terasic_a10_mmd","OpenCL"]
         default_libdir = [
-                "/opt/altera/16.0/hld/board/terasic/de5net/linux64/lib",
-                "/opt/altera/16.0/hld/board/terasic/s5_ref/linux64/lib",
-                "/opt/altera/16.0/hld/host/linux64/lib"]
+                "/opt/altera_pro/16.0/hld/board/de5a_net/linux64/lib",
+                "/opt/altera_pro/16.0/hld/host/linux64/lib",
+                "/opt/intelFPGA/16.1/hld/board/de5net/linux64/lib",
+                "/opt/intelFPGA/16.1/hld/board/s5_ref/linux64/lib",
+                "/opt/intelFPGA/16.1/hld/host/linux64/lib"]
         default_ldflags = ["-Wl,--no-as-needed"]
         default_incdir = []
 #        default_libs = ["OpenCL"]
