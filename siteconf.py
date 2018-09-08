@@ -3,7 +3,7 @@ CL_ENABLE_GL = False
 CL_USE_SHIPPED_EXT = True
 CL_PRETEND_VERSION = '1.1'
 CL_INC_DIR = []
-CL_LIB_DIR = ['/opt/Xilinx/SDAccel/2016.2/runtime/lib/x86_64']
+CL_LIB_DIR = ['/opt/Xilinx/SDx/2016.3/runtime/lib/x86_64']
 CL_LIBNAME = ['xilinxopencl']
 CXXFLAGS = ['-std=c++0x']
 LDFLAGS = []
