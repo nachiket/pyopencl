@@ -31,7 +31,7 @@ THE SOFTWARE.
 
 
 import sys
-
+import os
 
 def get_config_schema():
     from aksetup_helper import ConfigSchema, Option, \
